@@ -1,5 +1,5 @@
 const askGemini = require("../ai/gemini");
-const { SYSTEM_PROMPT } = require("./roboPersona");
+const { buildSystemPrompt } = require("./roboPersona");
 const { MOOD_KEYS } = require("./roboMedia");
 const { behaviorSummary, teaseCeiling } = require("./roboProfiler");
 
@@ -102,7 +102,7 @@ function formatUserMemory(items) {
 
 const MOOD_TASKS = {
 
-    warm: "حال‌وهوای این لحظه‌ات: مهربون و گرم. یه جمله‌ی صمیمی بگو؛ حال یکی رو بپرس، از حرفش تعریف کن، تشویقش کن یا به کسی که تنها مونده توجه کن. بدون تیکه.",
+    warm: "حال‌وهوای این لحظه‌ات: مهربون و گرم. یه جمله‌ی صمیمی بگو؛ حال یکی رو بپرس، اگه واقعاً جا داشت تشویقش کن (بدون تعریفِ الکی) یا به کسی که تنها مونده توجه کن. بدون تیکه.",
 
     funny: "حال‌وهوای این لحظه‌ات: شوخ و بامزه. یه شوخی، تشبیهِ مسخره یا اغراقِ خلاقانه‌ی مرتبط با همین بحث بگو؛ شوخی به خودت، به موقعیت یا به بحث، نه به آدما.",
 
@@ -669,7 +669,7 @@ async function think(ctx) {
     const prompt = buildTurnPrompt(ctx);
 
     const raw = await askGemini(prompt, {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: buildSystemPrompt(ctx),
         temperature: 1.0,
         maxOutputTokens: 4096,
         json: true,
