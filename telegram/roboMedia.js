@@ -23,6 +23,9 @@ const {
     getMediaStats
 } = require("../services/roboMemoryService");
 
+// گیف/استیکر/پکی که مالک ممنوع کرده؛ نه ذخیره می‌شه نه ازش استفاده می‌شه
+const moderation = require("./roboModeration");
+
 // ======================================================
 // CONFIG
 // ======================================================
@@ -196,7 +199,9 @@ const LINES = {
 
     unsupported: "این نوع استیکر (ایموجی سفارشی یا ماسک) رو نمی‌تونم بفرستم 😕",
 
-    packFail: "نتونستم این پک رو باز کنم؛ مطمئنی لینکش درسته؟"
+    packFail: "نتونستم این پک رو باز کنم؛ مطمئنی لینکش درسته؟",
+
+    banned: "این یکی ممنوعه 🚫 برش نمی‌دارم."
 
 };
 
@@ -256,7 +261,10 @@ async function pickForSend(kind, mood, excludeUniqueIds) {
 
     const wanted = MOOD_KEYS.includes(mood) ? mood : "misc";
 
-    return pickMediaItem(kind, wanted, excludeUniqueIds || []);
+    // ممنوع‌شده‌ها هیچ‌وقت انتخاب نمی‌شن (حتی اگه قبل از ممنوع شدن ذخیره شده باشن)
+    const excluded = (excludeUniqueIds || []).concat(moderation.bannedUniqueIds());
+
+    return pickMediaItem(kind, wanted, excluded);
 
 }
 
@@ -689,6 +697,15 @@ async function handleGif(deps, msg, gif, admin) {
 async function handleIncoming(deps, msg) {
 
     const admin = isAdmin(deps.adminId, msg.from.id);
+
+    // ممنوع‌شده: ذخیره نمی‌شه
+    if (moderation.isBannedMessage(msg)) {
+
+        await reply(deps, msg, LINES.banned);
+
+        return true;
+
+    }
 
     if (msg.sticker) return handleSticker(deps, msg, admin);
 

@@ -4,6 +4,8 @@
 // v5: شروع بحث توسط خود روبو، مالک (پل پیوی↔گروه)، لحن آروم‌تر
 // v6: ادامه‌ی گفتگو بدون صدا زدن (ENGAGE)، حال‌وهواهای خودخواسته (MOODS)،
 //     فعال‌تر شدن توی گروه، و دستورهای مالک از پیوی (پیام دادن / سوژه کردن توی گروه)
+// v11: مدیریت گروه (roboModeration): گزارش تمسخر نظام به مالک + حذف/سکوت با دستور مالک،
+//     و گیف/استیکرِ ممنوع (حذف خودکار + اخطارِ هوش مصنوعی)
 // ======================================================
 require("./roboSpeed").install();
 
@@ -48,6 +50,8 @@ const format = require("./roboFormat");
 const search = require("./roboSearch");
 
 const quiet = require("./roboQuiet");
+
+const moderation = require("./roboModeration");
 
 console.log("🔥 TELEGRAM ROBO BOT LOADED");
 
@@ -2725,6 +2729,16 @@ async function onMessage(msg) {
 
         if (isPrivate) {
 
+            // دستورهای مدیریتیِ مالک (گیف/استیکرِ ممنوع، حذف/سکوتِ متخلف)؛
+            // فقط از روی آیدی/یوزرنیمِ تلگرام تأیید می‌شه (checkOwner)
+            if (checkOwner(msg.from)) {
+
+                const moderated = await moderation.handleOwnerMessage(msg);
+
+                if (moderated) return;
+
+            }
+
             const handled = await media.handleIncoming(
                 { tg, adminId: process.env.TELEGRAM_ADMIN_ID },
                 msg
@@ -2806,6 +2820,16 @@ async function onMessage(msg) {
             : false;
 
         const displayName = await resolveName(chatId, userId, msg.from);
+
+        // گیف / استیکرِ ممنوع توی گروه: پاک می‌شه، اخطار می‌ره و ادامه‌ی منطق اجرا نمی‌شه
+        // (مالک معاف)
+        if (!isPrivate && !checkOwner(msg.from)) {
+
+            const banned = await moderation.enforceMedia(msg, displayName);
+
+            if (banned) return;
+
+        }
 
         // ==========================================
         // شناخت عضو (فقط گروه‌ها): شمارنده‌ها + تحلیل دوره‌ای
@@ -2892,6 +2916,14 @@ async function onMessage(msg) {
                 : null,
             isBot: false
         });
+
+        // تمسخرِ نظام/آخوند/ارزشی‌ها: بی‌صدا بررسی می‌شه و اگه واقعاً بود، به مالک خبر می‌ره
+        // (توی حالت نظاره‌گر هم کار می‌کنه؛ مالک معاف)
+        if (!isPrivate && !info.isOwner && content.plain) {
+
+            moderation.inspectText(msg, displayName);
+
+        }
 
         // بعد از ری‌استارت به پیام‌های قدیمی جواب نده
         if (Date.now() / 1000 - msg.date > CONFIG.STALE_SECONDS) return;
@@ -3169,6 +3201,12 @@ function startBot() {
 
     bot = new TelegramBot(TOKEN, { polling: true });
 
+    moderation.init({
+        tg,
+        getOwnerId: () => ownerId,
+        isOwner: from => checkOwner(from)
+    });
+
     console.log("🤖 ROBO STARTED");
 
     // گروه‌هایی که ساکتشون کردن (بعد از ری‌استارت هم ساکت می‌مونن)
@@ -3212,6 +3250,17 @@ function startBot() {
 
     // دکمه‌های اینلاین (انتخاب حال‌وهوای گیف، حذف توسط ادمین)
     bot.on("callback_query", query => {
+
+        // دکمه‌های گزارشِ مدیریت (حذف / سکوت / اخطار)
+        if (moderation.isCallback(query)) {
+
+            moderation
+                .onCallback(query)
+                .catch(error => console.log("❌ MODERATION CALLBACK ERROR:", error.message));
+
+            return;
+
+        }
 
         media
             .onCallback({ tg, adminId: process.env.TELEGRAM_ADMIN_ID }, query)
